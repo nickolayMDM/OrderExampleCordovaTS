@@ -1,0 +1,22 @@
+@import "../variables";
+
+.categories-list {
+  display: flex;
+  flex-direction: column;
+  align-items: start;
+
+  > button {
+    width: 100%;
+    text-align: left;
+    font-size: $fontSize-big;
+    padding: 3px;
+
+    + button {
+      margin-top: 5px;
+    }
+
+    &.active {
+      background-color: rgba(0, 0, 0, .2);
+    }
+  }
+}

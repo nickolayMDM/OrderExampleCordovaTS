@@ -1,0 +1,16 @@
+<?xml version='1.0' encoding='utf-8'?>
+<widget id="io.cordova.ordersexample" version="0.2.0" xmlns="http://www.w3.org/ns/widgets" xmlns:cdv="http://cordova.apache.org/ns/1.0" xmlns:android="http://schemas.android.com/apk/res/android">
+    <name>Orders Example</name>
+    <description>
+        An example of a simple restaurant order application
+    </description>
+    <author email="nickolaymdm@gmail.com">
+        Mykola Mykhaliuk
+    </author>
+    <content src="index.html" />
+    <platform name="android">
+        <allow-intent href="market:*" />
+    </platform>
+    <preference name="AndroidLaunchMode" value="singleInstance" />
+    <preference name="KeyboardDisplayRequiresUserAction" value="false"/>
+</widget>

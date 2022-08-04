@@ -1,0 +1,16 @@
+@import "../_variables";
+
+.scene {
+  flex: 1 1 100%;
+  padding: $outerPadding $outerPadding 0;
+  overflow: auto;
+  position: relative;
+
+  &.card-list {
+    > div {
+      &:first-child {
+        margin-top: 0;
+      }
+    }
+  }
+}

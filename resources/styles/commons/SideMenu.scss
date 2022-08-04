@@ -1,0 +1,92 @@
+@import "../variables";
+
+@mixin mode($name, $backgroundColor, $primaryColor) {
+  .app-mode-#{$name} {
+    .side-menu {
+      background-color: #{$backgroundColor};
+      .side-menu-icon-tab {
+        background-color: #{$backgroundColor};
+      }
+      .side-menu-header {
+        border-bottom: 1px solid #{$primaryColor};
+      }
+    }
+  }
+}
+
+@include mode(
+                "bright",
+                $brightMode-color-background,
+                $brightMode-color-primary
+);
+
+@include mode(
+                "dark",
+                $darkMode-color-background,
+                $darkMode-color-primary
+);
+
+.side-menu {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  width: 80%;
+  z-index: $zOverlay;
+  box-shadow: $modalBoxShadow;
+  padding: 15px;
+
+  &.transitioning {
+    transition: left $transition-default, margin-left $transition-default, margin-right $transition-default;
+  }
+
+  &.side-menu-left {
+    left: -100%;
+
+    &.showed {
+      left: -80%;
+      margin-left: -8px;
+    }
+
+    &.opened {
+      left: 0;
+      margin-left: 0;
+    }
+
+    .side-menu-icon-tab {
+      right: -46px;
+    }
+  }
+
+  &.side-menu-right {
+    left: 120%;
+
+    &.showed {
+      left: 100%;
+      margin-right: -8px;
+    }
+
+    &.opened {
+      left: 0;
+      margin-right: 0;
+    }
+
+    .side-menu-icon-tab {
+      left: -46px;
+    }
+  }
+
+  .side-menu-icon-tab {
+    position: absolute;
+    top: 50%;
+    margin-top: -23px;
+    padding: 10px 10px 10px 12px;
+    border-radius: 0 100% 100% 0;
+    height: 45px;
+    box-shadow: 6px 0 3px 2px rgb(0 0 0 / 24%);
+  }
+
+  .side-menu-header {
+    margin: 0 0 10px;
+    padding-bottom: 7px;
+  }
+}

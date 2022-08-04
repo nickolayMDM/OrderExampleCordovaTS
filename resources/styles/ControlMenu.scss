@@ -1,0 +1,184 @@
+@import "./_variables";
+
+@mixin mode($name, $backgroundColor, $greenColor) {
+  .app-mode-#{$name} .control-menu {
+    background-color: #{$backgroundColor};
+
+    .control-menu-buttons-container {
+      background-color: #{$backgroundColor};
+
+      > div {
+        &.cart-button .in-cart-total {
+          background-color: #{$greenColor};
+        }
+
+        .image-wrapper .highlighted-icon-text {
+          text-shadow: -1px -1px 0 #{$backgroundColor}, 1px -1px 0 #{$backgroundColor}, -1px 1px 0 #{$backgroundColor}, 1px 1px 0 #{$backgroundColor};
+        }
+      }
+    }
+  }
+}
+
+@include mode(
+                "bright",
+                $brightMode-color-background,
+                $brightMode-color-green
+);
+
+@include mode(
+                "dark",
+                $darkMode-color-background,
+                $darkMode-color-green
+);
+
+#app.switching-modes .control-menu {
+  transition: all $defaultTransition;
+
+  .control-menu-buttons-container {
+    transition: all $defaultTransition;
+  }
+
+  .control-menu-popup {
+    transition: all $defaultTransition;
+  }
+}
+
+.control-menu {
+  width: 100vw;
+  transition: padding-top 0.2s;
+  position: relative;
+  box-shadow: 0 -3px 3px 0 rgba($blackColor, 7%);
+
+  &.control-menu-opened {
+    padding-top: 40px;
+  }
+
+  .control-menu-buttons-container {
+    position: relative;
+    display: flex;
+    height: $controlMenuHeight;
+    justify-content: space-between;
+    align-items: flex-start;
+    z-index: $zForeground;
+    padding: 0 $outerPadding;
+
+    > div {
+      min-width: 47px;
+      min-height: 100%;
+      display: flex;
+      text-align: center;
+      flex-direction: column;
+      align-items: center;
+      transition: transform 1s;
+
+      &:active {
+        background-color: $hoverBackgroundColor;
+      }
+
+      &.rotated {
+        transform: rotate(360deg);
+      }
+
+      &.home-button {
+        padding-top: 16px;
+
+        .description-text {
+          margin-top: 1px;
+        }
+      }
+
+      &.search-button {
+        padding-top: 21px;
+      }
+
+      &.cart-button {
+        position: relative;
+        padding-top: 8px;
+        padding-right: 10px;
+
+        .description-text {
+          max-width: 80px;
+          padding-left: 10px;
+          margin-top: 1px;
+        }
+
+        .in-cart-total {
+          position: absolute;
+          padding: 3px 8px;
+          border-radius: $borderRadius-circle;
+          top: 0;
+          right: 0;
+          font-weight: 700;
+          font-size: $fontSize-big;
+        }
+      }
+
+      &.wishlist-button {
+        padding-top: 18px;
+      }
+
+      &.settings-button {
+        padding-top: 20px;
+
+        .description-text {
+          margin-top: 5px;
+        }
+      }
+
+      .image-wrapper {
+        position: relative;
+        width: 100%;
+
+        .highlighted-icon-text {
+          color: $linkColor;
+          position: absolute;
+          right: 0;
+          font-weight: 700;
+        }
+      }
+
+      .description-text {
+        margin: 3px 0 0;
+        max-width: 60px;
+        text-overflow: ellipsis;
+        overflow: hidden;
+      }
+    }
+  }
+
+  .control-menu-popup {
+    position: absolute;
+    top: 0;
+    left: $outerPadding;
+    right: $outerPadding;
+    z-index: $zForeground - 1;
+    padding: 5px 0;
+    display: flex;
+    align-items: center;
+
+    &.order-confirm {
+      flex-direction: column;
+      align-items: stretch;
+
+      .cart-total {
+        margin-bottom: 8px;
+        font-size: 16px;
+        font-weight: 700;
+      }
+
+      .cart-actions {
+        display: flex;
+        justify-content: space-between;
+      }
+    }
+
+    .input-wrapper {
+      flex-grow: 1;
+    }
+
+    .close-icon {
+      padding-left: 15px;
+    }
+  }
+}

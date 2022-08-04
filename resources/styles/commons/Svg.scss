@@ -1,0 +1,31 @@
+@import "../_variables";
+
+@mixin mode($name, $primaryColor, $dangerColor) {
+  .app-mode-#{$name} {
+    svg {
+      path {
+        fill: #{$primaryColor};
+      }
+
+      &.svg-danger path {
+        fill: #{$dangerColor};
+      }
+
+      &.svg-background path {
+        fill: #{$primaryColor};
+      }
+    }
+  }
+}
+
+@include mode(
+                "bright",
+                $brightMode-color-primary,
+                $brightMode-color-danger
+);
+
+@include mode(
+                "dark",
+                $darkMode-color-primary,
+                $darkMode-color-danger
+);

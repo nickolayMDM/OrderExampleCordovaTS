@@ -1,0 +1,12 @@
+@import "../_variables";
+
+.modal-orderThankYou .modal-body {
+  text-align: center;
+  font-size: $fontSize-big;
+  font-weight: 700;
+  padding: 5px 0 10px;
+
+  > p + p {
+    margin-top: 4px;
+  }
+}
