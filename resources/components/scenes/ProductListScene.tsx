@@ -1,11 +1,12 @@
 import * as React from 'react';
 import * as zod from "zod";
-import {areObjectsSimilar} from "../../helpers/objects";
 import {useAppSelector, useAppDispatch} from "../../redux/hooks";
 import serverRequester from "../../adapters/serverRequesterAdapter";
-import {setActiveLeftMenuName} from "../../redux/slices/sideMenuSlice";
 import {addAvailableName as addAvailableTabName, setName as setTabName} from "../../redux/slices/tabSlice";
+import {setActiveLeftMenuName} from "../../redux/slices/sideMenuSlice";
 import {ScenePropsValidator} from "./SceneInterface";
+import {createMachine} from "xstate";
+import {useMachine} from "@xstate/react";
 
 import Scene from "../commons/Scene";
 import ProductCard from "../CardList/ProductCard";
@@ -13,6 +14,7 @@ import LoadingBlock from "../commons/LoadingBlock";
 
 const sceneName = "productList";
 
+//TODO: make a tab common component, use that to add tab names instead of the scene; maybe make scenes for every tab
 const tabNames = [
     "menu",
     "wishlist",
@@ -20,38 +22,80 @@ const tabNames = [
     "search"
 ];
 
-//TODO: add xstate
+const stateMachine = createMachine({
+    id: 'productListScene',
+    initial: "initiating",
+    context: {
+        tab: "",
+        productList: [] as Product[]
+    },
+    states: {
+        initiating: {
+            entry: ["initialize"],
+            on: {
+                INITIATED: {
+                    target: "loading"
+                }
+            }
+        },
+        loading: {
+            entry: ["getContents"],
+            on: {
+                LOADED: {
+                    target: "active"
+                }
+            }
+        },
+        active: {
+            on: {
+                LOAD: {
+                    target: "loading"
+                }
+            }
+        }
+    }
+});
+
 function ProductListScene(props: zod.infer<typeof ScenePropsValidator>) {
     ScenePropsValidator.parse(props);
 
     const dispatch = useAppDispatch();
+    const globalSceneName = useAppSelector((state) => state.scene.name);
     const globalTabName = useAppSelector((state) => state.tab.name);
     const globalProductFilter = useAppSelector((state) => state.products.filter);
-    const globalProductList = useAppSelector((state) => state.products.list);
     const globalLocaleCode = useAppSelector((state) => state.language.localeCode);
     const inWishlistTotal = useAppSelector((state) => state.wishlist.inWishlistTotal);
     const inCartTotal = useAppSelector((state) => state.cart.inCartTotal);
 
-    let [localTabName, setLocalTabName] = React.useState(globalTabName);
-    let [isLoading, setIsLoading] = React.useState(false);
-    let [productList, setProductList] = React.useState([] as Product[]);
+    const [currentState, sendToState] = useMachine(stateMachine, {
+        actions: {
+            initialize: () => {
+                for (let key = 0; key < tabNames.length; key++) {
+                    dispatch(addAvailableTabName(tabNames[key]));
+                }
+                dispatch(setTabName("menu"));
 
-    const handleProductListChange = async () => {
-        setProductList(globalProductList);
-    };
+                sendToState("INITIATED");
+            },
+            getContents: async (context) => {
+                const productList = await serverRequester.getProductsPage(
+                    globalProductFilter,
+                    globalLocaleCode,
+                    globalTabName
+                );
 
-    React.useEffect(() => {
-        for (let key = 0; key < tabNames.length; key++) {
-            dispatch(addAvailableTabName(tabNames[key]));
+                context.productList = productList;
+                sendToState("LOADED");
+            }
         }
-
-        getContents();
-    }, []);
+    });
 
     React.useEffect(() => {
         if (inWishlistTotal <= 0 && globalTabName === "wishlist") {
             dispatch(setTabName("menu"));
         }
+
+        sendToState("LOAD");
     }, [inWishlistTotal]);
 
     React.useEffect(() => {
@@ -59,58 +103,38 @@ function ProductListScene(props: zod.infer<typeof ScenePropsValidator>) {
             dispatch(setTabName("menu"));
         }
 
-        getContents();
+        sendToState("LOAD");
     }, [inCartTotal]);
 
     React.useEffect(() => {
-        if (!areObjectsSimilar(globalProductList, productList)) {
-            handleProductListChange();
-        }
-    }, [globalProductList]);
-
-    const handleTabChange = () => {
-        setLocalTabName(globalTabName);
-        toggleCategoriesSideMenu();
-    };
-
-    React.useEffect(() => {
-        if (localTabName !== globalTabName) {
-            handleTabChange();
-            getContents();
+        if (currentState.context.tab !== globalTabName) {
+            sendToState("LOAD");
+            toggleCategoriesSideMenu();
         }
     }, [globalTabName]);
 
     React.useEffect(() => {
-        getContents();
+        toggleCategoriesSideMenu();
+    }, [globalSceneName]);
+
+    React.useEffect(() => {
+        sendToState("LOAD");
     }, [globalProductFilter]);
 
-    const getContents = async () => {
-        setIsLoading(true);
-
-        const productList = await serverRequester.getProductsPage(
-            globalProductFilter,
-            globalLocaleCode,
-            globalTabName
-        );
-
-        setProductList(productList);
-        setIsLoading(false);
-    };
-
     const toggleCategoriesSideMenu = () => {
-        // if (localTabName === "menu") {
-        //     dispatch(setActiveLeftMenuName("categories"));
-        // } else {
-        //     dispatch(setActiveLeftMenuName(""));
-        // }
+        if (globalTabName === "menu" && globalSceneName === sceneName) {
+            dispatch(setActiveLeftMenuName("categories"));
+        } else {
+            dispatch(setActiveLeftMenuName(""));
+        }
     };
 
     const renderProducts = () => {
-        if (productList.length < 1) {
+        if (currentState.context.productList.length < 1) {
             return [];
         }
 
-        return productList.map((item: Product) => {
+        return currentState.context.productList.map((item: Product) => {
             return <ProductCard
                 key={item.ID}
                 ID={item.ID}
@@ -125,9 +149,13 @@ function ProductListScene(props: zod.infer<typeof ScenePropsValidator>) {
         });
     };
 
+    const isLoading = () => {
+        return currentState.value === "loading";
+    };
+
     return (
         <Scene name={sceneName} activate={props.activate} className="card-list">
-            <LoadingBlock isLoading={isLoading}/>
+            <LoadingBlock isLoading={isLoading()}/>
             {renderProducts()}
         </Scene>
     );

@@ -1,17 +1,13 @@
 import * as React from 'react';
 import * as zod from "zod";
 
-import BaseInput, {BaseInputElement} from "./BaseInput";
+import BaseInput, {BaseInputElement, BaseInputProps} from "./BaseInput";
 
 export const TextInputPropsValidator = zod.object({
     label: zod.string().min(1).optional()
 });
 
-export interface TextInputProps extends React.ComponentPropsWithRef<"input"> {
-    label?: zod.infer<typeof TextInputPropsValidator._shape.label>,
-}
-
-const TextInput: React.ForwardRefRenderFunction<BaseInputElement, TextInputProps> = (props, ref) => {
+const TextInput: React.ForwardRefRenderFunction<BaseInputElement, BaseInputProps> = (props, ref) => {
     TextInputPropsValidator.passthrough().parse(props);
 
     const getClassName = (): string => {

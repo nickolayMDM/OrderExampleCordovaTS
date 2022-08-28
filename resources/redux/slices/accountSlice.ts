@@ -1,5 +1,5 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
-import validators from "../../helpers/validators";
+import validatorHelpers from "../../helpers/validators";
 import errorHelpers from "../../helpers/error";
 
 export interface DataState {
@@ -14,9 +14,19 @@ const initialState: DataState = {
     address: ""
 };
 
+export const validators = {
+    phone: (value: string) => {
+        return validatorHelpers.isUAPhone(value);
+    }
+};
+
+export const errorMessages = {
+    phone: "phone must be a ukrainian phone number"
+};
+
 const validate = {
     phone: (value: string) => {
-        if(!validators.isUAPhone(value)) errorHelpers.throwError("phone must be a ukrainian phone number");
+        if(!validators.phone(value)) errorHelpers.throwError(errorMessages.phone);
     },
     state: (value: DataState) => {
         validate.phone(value.phone);

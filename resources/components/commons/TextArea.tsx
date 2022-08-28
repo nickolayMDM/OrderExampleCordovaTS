@@ -2,6 +2,8 @@ import * as React from 'react';
 import * as zod from "zod";
 import validators from "../../helpers/validators";
 import stringHelpers from "../../helpers/strings";
+import {createMachine} from "xstate";
+import {useMachine} from "@xstate/react";
 
 import PopupTitle from "./PopupTitle";
 
@@ -11,7 +13,55 @@ export const TextAreaPropsValidator = zod.object({
     validator: zod.function().args(zod.string()).returns(zod.boolean()).optional()
 });
 
-export interface TextAreaProps extends Omit<React.ComponentPropsWithRef<"textarea">, 'ref'> {
+const stateMachine = createMachine({
+    id: 'textarea',
+    initial: "loading",
+    context: {
+        id: "",
+        value: ""
+    },
+    states: {
+        loading: {
+            entry: ["load"],
+            on: {
+                LOADED: {
+                    target: "active"
+                }
+            }
+        },
+        error: {
+            on: {
+                LOAD: {
+                    target: "loading"
+                },
+                HIDE_ERROR: {
+                    target: "active"
+                },
+                VALIDATION_SUCCEEDED: {
+                    target: "active"
+                }
+            }
+        },
+        active: {
+            on: {
+                LOAD: {
+                    target: "loading"
+                },
+                VALUE_CHANGE: {
+                    actions: ["setValue"]
+                },
+                VALIDATE: {
+                    actions: ["validate"]
+                },
+                VALIDATION_FAILED: {
+                    target: "error"
+                }
+            }
+        }
+    }
+});
+
+export interface TextAreaProps extends Omit<React.ComponentProps<"textarea">, 'ref'> {
     label: zod.infer<typeof TextAreaPropsValidator._shape.label>,
     invalid_title?: zod.infer<typeof TextAreaPropsValidator._shape.invalid_title>,
     validator?: zod.infer<typeof TextAreaPropsValidator._shape.validator>,
@@ -24,9 +74,38 @@ export interface TextAreaElement {
     getValue: () => string
 }
 
-//TODO: add xstate
 const TextArea: React.ForwardRefRenderFunction<TextAreaElement, TextAreaProps> = (props, ref) => {
     TextAreaPropsValidator.passthrough().parse(props);
+
+    const [currentState, sendToState] = useMachine(stateMachine, {
+        actions: {
+            load: (context) => {
+                let newIdString = getIdString();
+                context.id = newIdString;
+
+                sendToState("LOADED");
+            },
+            validate: (context) => {
+                if (!isValid(context.value)) {
+                    sendToState("VALIDATION_FAILED");
+                    return;
+                }
+
+                sendToState("VALIDATION_SUCCEEDED");
+            },
+            setValue: (context, event) => {
+                context.value = event.payload;
+            }
+        }
+    });
+
+    const isValid = (value: string) => {
+        if (validators.isFunction(props.validator)) {
+            return props.validator(value);
+        }
+
+        return true;
+    };
 
     const getIdString = () => {
         if (props.id) {
@@ -40,45 +119,26 @@ const TextArea: React.ForwardRefRenderFunction<TextAreaElement, TextAreaProps> =
         return null;
     };
 
-    let [id, setId] = React.useState(null as string);
-    let [value, setValue] = React.useState(props.value);
-    let [hasError, setHasError] = React.useState(false);
-
     React.useEffect(() => {
-        setId(getIdString());
+        sendToState("LOAD");
     }, [props.id, props.label]);
-
-    const isValid = (): boolean => {
-        if (validators.isFunction(props.validator)) {
-            return props.validator(value as string);
-        }
-
-        return true;
-    };
-
-    const validate = () => {
-        let isValidBoolean = isValid();
-        setHasError(!isValidBoolean);
-
-        return isValidBoolean;
-    };
 
     React.useImperativeHandle(ref, () => ({
         setValue: (value: string) => {
-            setValue(value);
+            sendToState({type: "VALUE_CHANGE", payload: value});
         },
         getValue: () => {
-            return String(value);
+            return currentState.context.value;
         },
         validate: () => {
-            return validate();
+            sendToState("VALIDATE");
+
+            return isValid(currentState.context.value);
         }
     }));
 
     const onFocus = () => {
-        if (hasError) {
-            hasError = false;
-        }
+        sendToState("HIDE_ERROR");
     };
 
     const renderLabel = () => {
@@ -86,16 +146,20 @@ const TextArea: React.ForwardRefRenderFunction<TextAreaElement, TextAreaProps> =
             return "";
         }
 
-        return <label htmlFor={id}>{props.label}</label>
+        return <label htmlFor={currentState.context.id}>{props.label}</label>
     };
 
     const handleChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
-        setValue(event.target.value);
+        sendToState({type: "VALUE_CHANGE", payload: event.target.value});
+    };
+
+    const hasError = () => {
+        return currentState.value === "error";
     };
 
     const getClassName = () => {
         let classNameString = "input text-area";
-        if (hasError) {
+        if (hasError()) {
             classNameString += " input-error";
         }
         if (typeof props.className === "string") {
@@ -108,7 +172,7 @@ const TextArea: React.ForwardRefRenderFunction<TextAreaElement, TextAreaProps> =
     const renderErrorPopup = () => {
         if (validators.isPopulatedString(props.invalid_title)) {
             return (
-                <PopupTitle display={hasError}>
+                <PopupTitle display={hasError()}>
                     {props.invalid_title}
                 </PopupTitle>
             );
@@ -129,7 +193,7 @@ const TextArea: React.ForwardRefRenderFunction<TextAreaElement, TextAreaProps> =
             {renderLabel()}
             <textarea onFocus={onFocus}
                       onChange={handleChange} {...getProps()}
-                      className={getClassName()} value={value}/>
+                      className={getClassName()} value={currentState.context.value}/>
             {renderErrorPopup()}
         </div>
     );

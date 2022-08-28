@@ -7,6 +7,10 @@ import {setSearchQuery as setGlobalSearchQuery} from "../../redux/slices/product
 import TextInput from "../commons/Input/TextInput";
 
 import "../../styles/ControlMenu/SearchInput.scss";
+import {createMachine} from "xstate";
+import {useMachine} from "@xstate/react";
+import {addAvailableName} from "../../redux/slices/modalSlice";
+import {BaseInputElement} from "../commons/Input/BaseInput";
 
 export const SearchInputPropsValidator = zod.object({
     className: zod.string().min(1).optional()
@@ -14,60 +18,101 @@ export const SearchInputPropsValidator = zod.object({
 
 const performSearchDelayMS = 500;
 
-//TODO: add xstate
+const stateMachine = createMachine({
+    id: 'searchInput',
+    initial: "hidden",
+    states: {
+        hidden: {
+            entry: ["clearValue"],
+            on: {
+                SHOW: {
+                    target: "disabled"
+                },
+                SHOW_AND_ACTIVATE: {
+                    target: "idle"
+                }
+            }
+        },
+        disabled: {
+            on: {
+                ACTIVATE: {
+                    target: "idle"
+                },
+                HIDE: {
+                    target: "hidden"
+                }
+            }
+        },
+        idle: {
+            on: {
+                HIDE: {
+                    target: "hidden"
+                },
+                DISABLE: {
+                    target: "disabled"
+                },
+                VALUE_CHANGE: {
+                    target: "preSearch"
+                }
+            }
+        },
+        preSearch: {
+            after: {
+                [performSearchDelayMS]: {
+                    target: "idle",
+                    actions: ["performSearch"]
+                }
+            },
+            on: {
+                VALUE_CHANGE: {
+                    target: "preSearch"
+                },
+                HIDE: {
+                    target: "hidden"
+                },
+                CANCEL_SEARCH: {
+                    target: "idle"
+                }
+            }
+        }
+    }
+});
+
 function SearchInput(props: zod.infer<typeof SearchInputPropsValidator>) {
     SearchInputPropsValidator.parse(props);
 
     const dispatch = useAppDispatch();
-
-    let [performSearchTimeoutID, setPerformSearchTimeoutID] = React.useState(null as ReturnType<typeof setTimeout>);
-    let [displayed, setDisplayed] = React.useState(false);
-    let [active, setActive] = React.useState(false);
     let languageCode = useAppSelector((state) => state.language.localeCode);
     let tabName = useAppSelector((state) => state.tab.name);
-    let globalSearchQuery = useAppSelector((state) => state.products.filter.searchQuery);
-    let [localSearchQuery, setLocalSearchQuery] = React.useState(globalSearchQuery);
+    let inputRef = React.useRef<BaseInputElement>();
     let [translate] = useTranslations(languageCode);
 
-    const clearInput = () => {
-        setLocalSearchQuery("");
-    };
+    const [currentState, sendToState] = useMachine(stateMachine, {
+        actions: {
+            clearValue: () => {
+                inputRef.current.setValue("");
+            },
+            performSearch: () => {
+                dispatch(setGlobalSearchQuery(inputRef.current.getValue()));
+            }
+        }
+    });
 
     const handleTabChange = () => {
         if (tabName === "search") {
-            setDisplayed(true);
-            clearInput();
+            sendToState("SHOW");
         } else {
-            if (displayed === true) {
-                setDisplayed(false);
-            }
+            sendToState("HIDE");
         }
-    };
-
-    const handleSearchChange = () => {
-        if (active) {
-            clearTimeout(performSearchTimeoutID);
-            setPerformSearchTimeoutID(setTimeout(performSearch, performSearchDelayMS));
-        } else {
-            dispatch(setGlobalSearchQuery(""));
-        }
-    };
-
-    const performSearch = () => {
-        dispatch(setGlobalSearchQuery(localSearchQuery));
     };
 
     React.useEffect(() => {
         handleTabChange();
     }, [tabName]);
 
-    React.useEffect(() => {
-        handleSearchChange();
-    }, [localSearchQuery]);
-
     const getClassName = () => {
         let classNameString = "control-menu-popup search-input";
-        if (!displayed) {
+        if (currentState.value === "hidden") {
             classNameString += " hidden";
         }
         if (typeof props.className === "string") {
@@ -77,28 +122,24 @@ function SearchInput(props: zod.infer<typeof SearchInputPropsValidator>) {
         return classNameString;
     };
 
-    const handleSearchTextChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-        if (!active) {
-            return;
-        }
-
-        setLocalSearchQuery(event.target.value);
+    const handleSearchTextChange = () => {
+        sendToState("VALUE_CHANGE");
     };
 
     const activateSearchInput = () => {
-        setActive(true);
+        sendToState("ACTIVATE");
     };
 
     const disableSearchInput = () => {
-        setActive(false);
+        sendToState("DISABLE");
     };
 
     return (
         <div className={getClassName()}>
-            <TextInput onChange={handleSearchTextChange}
+            <TextInput ref={inputRef}
+                       onChange={handleSearchTextChange}
                        onFocus={activateSearchInput}
                        onBlur={disableSearchInput}
-                       value={localSearchQuery}
                        placeholder={translate("Your query here...", "Form")}
                        name="searchInput"
                        autoComplete="off"/>

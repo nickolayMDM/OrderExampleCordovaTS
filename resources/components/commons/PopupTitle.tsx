@@ -1,67 +1,120 @@
 import * as React from 'react';
 import * as zod from "zod";
 import validators from "../../helpers/validators";
+import {assign, createMachine} from "xstate";
+import {stateInstantFadeMS} from "../../config";
+import {useMachine} from "@xstate/react";
 
 import "../../styles/commons/PopupTitle.scss";
 
-//TODO: add xstate
-const fadeStates = {
-    active: "active transition",
-    fade: "fade transition",
-    hidden: "hidden"
-};
+const fadeSpeedMS = 300;
+
+const stateEnum = zod.enum([
+    "hidden",
+    "fadingIn",
+    "fadingOut",
+    "active",
+]);
+
+const stateClassNameEnum = zod.nativeEnum({
+    [stateEnum.enum.hidden]: "hidden",
+    [stateEnum.enum.fadingIn]: "fade transition",
+    [stateEnum.enum.fadingOut]: "fade transition",
+    [stateEnum.enum.active]: "active transition",
+});
+
+const stateMachine = createMachine({
+    id: 'popupTitle',
+    initial: stateEnum.enum.hidden,
+    context: {
+        className: stateClassNameEnum.enum[stateEnum.enum.hidden]
+    },
+    states: {
+        [stateEnum.enum.hidden]: {
+            entry: assign((context) => ({
+                ...context as object,
+                className: stateClassNameEnum.enum[stateEnum.enum.hidden]
+            })),
+            on: {
+                SHOW: {
+                    target: stateEnum.enum.fadingIn
+                }
+            }
+        },
+        [stateEnum.enum.fadingIn]: {
+            entry: assign((context) => ({
+                ...context as object,
+                className: stateClassNameEnum.enum[stateEnum.enum.fadingIn]
+            })),
+            after: {
+                [stateInstantFadeMS]: {
+                    target: stateEnum.enum.active
+                }
+            },
+            on: {
+                HIDE: {
+                    target: stateEnum.enum.fadingOut
+                }
+            }
+        },
+        [stateEnum.enum.fadingOut]: {
+            entry: assign((context) => ({
+                ...context as object,
+                className: stateClassNameEnum.enum[stateEnum.enum.fadingOut]
+            })),
+            after: {
+                [fadeSpeedMS]: {
+                    target: stateEnum.enum.hidden
+                }
+            },
+            on: {
+                SHOW: {
+                    target: stateEnum.enum.fadingIn
+                }
+            }
+        },
+        [stateEnum.enum.active]: {
+            entry: assign((context) => ({
+                ...context as object,
+                className: stateClassNameEnum.enum[stateEnum.enum.active]
+            })),
+            on: {
+                HIDE: {
+                    target: stateEnum.enum.fadingOut
+                }
+            }
+        }
+    }
+});
 
 export const PopupTitlePropsValidator = zod.object({
     display: zod.boolean().optional(),
     className: zod.string().min(1).optional()
 });
 
-const fadeSpeedMS = 300;
-
 function PopupTitle(props: React.PropsWithChildren<zod.infer<typeof PopupTitlePropsValidator>>) {
     PopupTitlePropsValidator.passthrough().parse(props);
 
-    let [fadeState, setFadeState] = React.useState(fadeStates.hidden);
-    let [displayed, setDisplayed] = React.useState(false);
-    let [fadeTimeout, setFadeTimeout] = React.useState(null as ReturnType<typeof setTimeout>);
+    const [currentState, sendToState] = useMachine(stateMachine);
 
     React.useEffect(() => {
-        if (props.display && !displayed && fadeState !== fadeStates.active) {
+        if (props.display) {
             fadeIn();
-        } else if (!props.display && displayed && fadeState !== fadeStates.hidden) {
+        } else if (!props.display) {
             fadeOut();
         }
-
-        setDisplayed(props.display);
-    });
-
-    const clearFadeTimeout = () => {
-        clearTimeout(fadeTimeout);
-        fadeTimeout = null;
-    };
+    }, [props.display]);
 
     const fadeOut = () => {
-        clearFadeTimeout();
-
-        setFadeState(fadeStates.fade);
-
-        setFadeTimeout(setTimeout(function() {
-            setFadeState(fadeStates.hidden);
-        }, fadeSpeedMS));
+        sendToState("HIDE");
     };
 
     const fadeIn = () => {
-        clearFadeTimeout();
-
-        setFadeState(fadeStates.fade);
-
-        setFadeTimeout(setTimeout(() => {
-            setFadeState(fadeStates.active);
-        }, 0));
+        sendToState("SHOW");
     };
 
     const getClassName = () => {
-        let classNameString = "popup-title " + fadeState;
+        let classNameString = "popup-title " + currentState.context.className;
         if (validators.isPopulatedString(props.className)) {
             classNameString += " " + props.className;
         }

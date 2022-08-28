@@ -2,6 +2,8 @@ import * as React from 'react';
 import * as zod from "zod";
 import validators from "../../../helpers/validators";
 import stringHelpers from "../../../helpers/strings";
+import {createMachine} from "xstate";
+import {useMachine} from "@xstate/react";
 
 import PopupTitle from "../PopupTitle";
 
@@ -11,6 +13,54 @@ export const BaseInputPropsValidator = zod.object({
     label: zod.string().min(1).optional(),
     invalid_title: zod.string().min(1).optional(),
     validator: zod.function().args(zod.string()).returns(zod.boolean()).optional()
+});
+
+const stateMachine = createMachine({
+    id: 'baseinput',
+    initial: "loading",
+    context: {
+        id: "",
+        value: ""
+    },
+    states: {
+        loading: {
+            entry: ["load"],
+            on: {
+                LOADED: {
+                    target: "active"
+                }
+            }
+        },
+        error: {
+            on: {
+                LOAD: {
+                    target: "loading"
+                },
+                HIDE_ERROR: {
+                    target: "active"
+                },
+                VALIDATION_SUCCEEDED: {
+                    target: "active"
+                }
+            }
+        },
+        active: {
+            on: {
+                LOAD: {
+                    target: "loading"
+                },
+                VALUE_CHANGE: {
+                    actions: ["setValue"]
+                },
+                VALIDATE: {
+                    actions: ["validate"]
+                },
+                VALIDATION_FAILED: {
+                    target: "error"
+                }
+            }
+        }
+    }
 });
 
 export interface BaseInputProps extends React.ComponentPropsWithRef<"input"> {
@@ -28,6 +78,28 @@ export interface BaseInputElement {
 const BaseInput: React.ForwardRefRenderFunction<BaseInputElement, BaseInputProps> = (props, ref) => {
     BaseInputPropsValidator.passthrough().parse(props);
 
+    const [currentState, sendToState] = useMachine(stateMachine, {
+        actions: {
+            load: (context) => {
+                let newIdString = getIdString();
+                context.id = newIdString;
+
+                sendToState("LOADED");
+            },
+            validate: (context) => {
+                if (!isValid(context.value)) {
+                    sendToState("VALIDATION_FAILED");
+                    return;
+                }
+
+                sendToState("VALIDATION_SUCCEEDED");
+            },
+            setValue: (context, event) => {
+                context.value = event.payload;
+            }
+        }
+    });
+
     const getIdString = (): string => {
         if (props.id) {
             return props.id;
@@ -40,39 +112,12 @@ const BaseInput: React.ForwardRefRenderFunction<BaseInputElement, BaseInputProps
         return null;
     };
 
-    const getValueString = (): string => {
-        let value = props.value as string;
-        if (validators.isPopulatedString(value)) {
-            return value;
-        }
-
-        return "";
-    };
-
-    let [id, setId] = React.useState(null as string);
-    let [value, setValue] = React.useState("");
-    let [hasError, setHasError] = React.useState(false);
-    let [customErrorMessage, setCustomErrorMessage] = React.useState("");
-    let [customErrorMessageTimeout, setCustomErrorMessageTimeout]  = React.useState(null as ReturnType<typeof setTimeout>);
-
-    React.useEffect(() => {
-        setId(getIdString());
-        setValue(getValueString());
-    }, []);
-
-    const isValid = (): boolean => {
+    const isValid = (value: string): boolean => {
         if (validators.isFunction(props.validator)) {
-            return props.validator(value as string);
+            return props.validator(value);
         }
 
         return true;
-    };
-
-    const validate = () => {
-        let isValidBoolean = isValid();
-        setHasError(!isValidBoolean);
-
-        return isValidBoolean;
     };
 
     const renderLabel = () => {
@@ -80,7 +125,7 @@ const BaseInput: React.ForwardRefRenderFunction<BaseInputElement, BaseInputProps
             return "";
         }
 
-        return <label htmlFor={id}>{props.label}</label>
+        return <label htmlFor={currentState.context.id}>{props.label}</label>
     };
 
     const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -88,7 +133,7 @@ const BaseInput: React.ForwardRefRenderFunction<BaseInputElement, BaseInputProps
             props.onChange(event);
         }
 
-        setValue(event.target.value);
+        sendToState({type: "VALUE_CHANGE", payload: event.target.value});
     };
 
     const onFocus = (event: React.FocusEvent<HTMLInputElement, Element>) => {
@@ -96,18 +141,16 @@ const BaseInput: React.ForwardRefRenderFunction<BaseInputElement, BaseInputProps
             props.onFocus(event);
         }
 
-        if (hasError) {
-            clearTimeout(customErrorMessageTimeout);
-            setHasError(false);
-            setCustomErrorMessageTimeout(setTimeout(() => {
-                setCustomErrorMessage("");
-            }, 300))
-        }
+        sendToState("HIDE_ERROR");
+    };
+
+    const hasError = () => {
+        return currentState.value === "error";
     };
 
     const getClassName = () => {
         let classNameString = "input";
-        if (hasError) {
+        if (hasError()) {
             classNameString += " input-error";
         }
         if (typeof props.className === "string") {
@@ -118,17 +161,9 @@ const BaseInput: React.ForwardRefRenderFunction<BaseInputElement, BaseInputProps
     };
 
     const renderErrorPopup = () => {
-        if (validators.isPopulatedString(customErrorMessage)) {
-            return (
-                <PopupTitle display={hasError}>
-                    {customErrorMessage}
-                </PopupTitle>
-            );
-        }
-
         if (validators.isPopulatedString(props.invalid_title)) {
             return (
-                <PopupTitle display={hasError}>
+                <PopupTitle display={hasError()}>
                     {props.invalid_title}
                 </PopupTitle>
             );
@@ -139,20 +174,32 @@ const BaseInput: React.ForwardRefRenderFunction<BaseInputElement, BaseInputProps
 
     React.useImperativeHandle(ref, () => ({
         setValue: zod.function().args(zod.string()).implement((value) => {
-            setValue(value);
+            sendToState({type: "VALUE_CHANGE", payload: value});
         }),
         getValue: zod.function().returns(zod.string()).implement(() => {
-            return String(value);
+            return currentState.context.value;
         }),
         validate: zod.function().returns(zod.boolean()).implement(() => {
-            return validate();
+            sendToState("VALIDATE");
+
+            return isValid(currentState.context.value);
         })
     }));
+
+    const getInputProps = () => {
+        let inputProps = {
+            ...props
+        }
+
+        delete inputProps.validator;
+
+        return inputProps;
+    };
 
     return (
         <div className="input-wrapper">
             {renderLabel()}
-            <input {...props} id={id} value={value} onFocus={onFocus}
+            <input {...getInputProps()} id={currentState.context.id} value={currentState.context.value} onFocus={onFocus}
                    onChange={handleChange}
                    className={getClassName()}/>
             {renderErrorPopup()}

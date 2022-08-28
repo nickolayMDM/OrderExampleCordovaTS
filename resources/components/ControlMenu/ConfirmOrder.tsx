@@ -7,40 +7,61 @@ import {setName as setModalName} from "../../redux/slices/modalSlice";
 import {setName as setTabName} from "../../redux/slices/tabSlice";
 import {setInCartTotal, setInCartTotalPrice} from "../../redux/slices/cartSlice";
 import serverRequester from "../../adapters/serverRequesterAdapter";
+import {createMachine} from "xstate";
 
 import Button from "../commons/Button";
 
 import "../../styles/ControlMenu/ConfirmOrder.scss";
+import {useMachine} from "@xstate/react";
 
 export const ConfirmOrderPropsValidator = zod.object({
     className: zod.string().min(1).optional()
 });
 
-//TODO: add xstate
+const stateMachine = createMachine({
+    id: 'confirmOrder',
+    initial: "hidden",
+    states: {
+        hidden: {
+            on: {
+                SHOW: {
+                    target: "active"
+                }
+            }
+        },
+        active: {
+            on: {
+                HIDE: {
+                    target: "hidden"
+                }
+            }
+        }
+    }
+});
+
 function ConfirmOrder(props: zod.infer<typeof ConfirmOrderPropsValidator>) {
     ConfirmOrderPropsValidator.parse(props);
 
     const dispatch = useAppDispatch();
 
-    let [displayed, setDisplayed] = React.useState(false);
     let tabName = useAppSelector((state) => state.tab.name);
     let inCartTotalPrice = useAppSelector((state) => state.cart.inCartTotalPrice);
     let languageCode = useAppSelector((state) => state.language.localeCode);
     let [translate] = useTranslations(languageCode);
 
+    const [currentState, sendToState] = useMachine(stateMachine);
+
     React.useEffect(() => {
         if (tabName === "cart") {
-            setDisplayed(true);
+            sendToState("SHOW");
         } else {
-            if (displayed === true) {
-                setDisplayed(false);
-            }
+            sendToState("HIDE");
         }
     }, [tabName]);
 
     const getClassName = () => {
         let classNameString = "control-menu-popup order-confirm";
-        if (!displayed) {
+        if (currentState.value === "hidden") {
             classNameString += " hidden";
         }
         if (validators.isPopulatedString(props.className)) {

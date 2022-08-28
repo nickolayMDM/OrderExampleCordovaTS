@@ -21,6 +21,7 @@ let Translation = {
         "Cancel": "Скасувати",
         "Confirm": "Підтвердити",
         "Save": "Зберегти",
+        "Saved": "Збережено",
         "To Menu": "Меню",
         "Add to Cart": "В кошик",
         "Cancel Order": "Скасувати",

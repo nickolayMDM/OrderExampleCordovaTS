@@ -3,6 +3,8 @@ import * as zod from "zod";
 import validators from "../../helpers/validators";
 import {useAppSelector, useAppDispatch} from "../../redux/hooks";
 import {addAvailableName, setOpenName} from "../../redux/slices/sideMenuSlice";
+import {createMachine, StateValue} from "xstate";
+import {useMachine} from "@xstate/react";
 
 import "../../styles/commons/SideMenu.scss";
 
@@ -14,7 +16,93 @@ export const SideMenuPropsValidator = zod.object({
     rightSide: zod.boolean().optional()
 });
 
-//TODO: add xstate
+const stateMachine = createMachine({
+    id: 'sideMenu',
+    initial: "initiating",
+    context: {
+        toPreviousStateEventName: "",
+        isRightSide: false,
+        isMovingLeft: false,
+        componentStartX: 0,
+        touchStartX: 0,
+        offsetX: 0
+    },
+    states: {
+        initiating: {
+            entry: ["initiate"],
+            on: {
+                INITIATED: {
+                    target: "hidden"
+                }
+            }
+        },
+        hidden: {
+            on: {
+                DISPLAY: {
+                    target: "closed"
+                }
+            }
+        },
+        closed: {
+            on: {
+                HIDE: {
+                    target: "hidden"
+                },
+                MOVE: {
+                    target: "moving"
+                },
+                OPEN: {
+                    target: "open"
+                },
+                TOUCH_START: {
+                    actions: ["setMoveContext"]
+                },
+                TOUCH_MOVE: {
+                    actions: ["handleMove"]
+                }
+            }
+        },
+        moving: {
+            on: {
+                OPEN: {
+                    target: "open"
+                },
+                CLOSE: {
+                    target: "closed"
+                },
+                HIDE: {
+                    target: "hidden"
+                },
+                TOUCH_MOVE: {
+                    actions: ["handleMove"]
+                },
+                TOUCH_END: {
+                    actions: ["endMove"]
+                }
+            }
+        },
+        open: {
+            on: {
+                MOVE: {
+                    target: "moving"
+                },
+                CLOSE: {
+                    target: "closed"
+                },
+                HIDE: {
+                    target: "hidden"
+                },
+                TOUCH_START: {
+                    actions: ["setMoveContext"]
+                },
+                TOUCH_MOVE: {
+                    actions: ["handleMove"]
+                }
+            }
+        }
+    }
+});
+
 function SideMenu(props: React.PropsWithChildren<zod.infer<typeof SideMenuPropsValidator>>) {
     SideMenuPropsValidator.passthrough().parse(props);
 
@@ -22,14 +110,69 @@ function SideMenu(props: React.PropsWithChildren<zod.infer<typeof SideMenuPropsV
 
     let ref = React.createRef<HTMLDivElement>();
     let globalSideMenuData = useAppSelector((state) => state.sideMenu);
-    let [componentStartPositionX, setComponentStartPositionX] = React.useState(null as number);
-    let [touchStartX, setTouchStartX] = React.useState(null as number);
-    let [offsetX, setOffsetX] = React.useState(null as number);
-    let [isMoving, setIsMoving] = React.useState(false);
-    let [isOpened, setIsOpened] = React.useState(false);
-    let [isShowed, setIsShowed] = React.useState(false);
-    let [isMovingLeft, setIsMovingLeft] = React.useState(false);
-    let [isTransitioning, setIsTransitioning] = React.useState(true);
+
+    const isRightSideMenu = () => {
+        return (props.rightSide);
+    };
+
+    const getCurrentStateEventName = () => {
+        switch (currentState.value) {
+            case "open":
+                return "OPEN";
+            case "closed":
+                return "CLOSE";
+            default:
+                return "";
+        }
+    };
+
+    const [currentState, sendToState] = useMachine(stateMachine, {
+        actions: {
+            initiate: (context) => {
+                dispatch(addAvailableName(props.name));
+                context.isRightSide = isRightSideMenu();
+
+                sendToState("INITIATED");
+            },
+            setMoveContext: (context, event) => {
+                const componentLeftPx = ref.current.getBoundingClientRect().left;
+                const componentLeftPercent = 100 / window.innerWidth * componentLeftPx;
+
+                context.componentStartX = componentLeftPercent;
+                context.touchStartX = event.payload.touches[0].clientX;
+            },
+            handleMove: (context, event) => {
+                const offsetX = 100 / window.innerWidth * (event.payload.touches[0].clientX - context.touchStartX);
+                context.offsetX = offsetX;
+                let isMovingLeft = false;
+                if (currentState.value !== "moving" && Math.abs(offsetX) > 1) {
+                    context.toPreviousStateEventName = getCurrentStateEventName();
+                    sendToState("MOVE");
+                }
+                if (offsetX < 0) {
+                    isMovingLeft = true;
+                }
+
+                context.isMovingLeft = isMovingLeft;
+            },
+            endMove: (context) => {
+                if (currentState.value === "moving") {
+                    if (Math.abs(context.offsetX) > minStateChangeOffsetPercent) {
+                        if (
+                            (isRightSideMenu() && context.isMovingLeft)
+                            || (!isRightSideMenu() && !context.isMovingLeft)
+                        ) {
+                            dispatch(setOpenName(props.name));
+                        } else {
+                            dispatch(setOpenName(""));
+                        }
+                    } else {
+                        sendToState(context.toPreviousStateEventName);
+                    }
+                }
+            }
+        }
+    });
 
     React.useEffect(() => {
         dispatch(addAvailableName(props.name));
@@ -43,25 +186,31 @@ function SideMenu(props: React.PropsWithChildren<zod.infer<typeof SideMenuPropsV
         return globalSideMenuData.activeLeftMenuName === props.name;
     };
 
+    const getGlobalDisplayVariableArray = () => {
+        if (props.rightSide) {
+            return [globalSideMenuData.activeRightMenuName];
+        }
+
+        return [globalSideMenuData.activeLeftMenuName];
+    };
+
     React.useEffect(() => {
-        if (globalSideMenuData.openMenuName === props.name && !isOpened) {
-            setIsOpened(true);
-        } else if (globalSideMenuData.openMenuName !== props.name && isOpened) {
-            setIsOpened(false);
+        if (globalSideMenuData.openMenuName === props.name) {
+            sendToState("OPEN");
+        } else if (globalSideMenuData.openMenuName !== props.name) {
+            sendToState("CLOSE");
         }
     }, [globalSideMenuData.openMenuName]);
 
     React.useEffect(() => {
-        if (isMenuDisplayed() && !isShowed) {
-            setIsShowed(true);
-        } else if (!isMenuDisplayed() && isShowed) {
-            setIsShowed(false);
-        }
-    }, [globalSideMenuData.activeRightMenuName, globalSideMenuData.activeLeftMenuName]);
+        let isMenuDisplayedBool = isMenuDisplayed();
 
-    const isRightSideMenu = () => {
-        return (props.rightSide);
-    };
+        if (isMenuDisplayedBool) {
+            sendToState("DISPLAY");
+        } else {
+            sendToState("HIDE");
+        }
+    }, getGlobalDisplayVariableArray());
 
     const getClassName = () => {
         let classNameString = "side-menu side-menu-" + props.name;
@@ -71,13 +220,13 @@ function SideMenu(props: React.PropsWithChildren<zod.infer<typeof SideMenuPropsV
             classNameString += " side-menu-left";
         }
 
-        if (isTransitioning) {
+        if (currentState.value !== "moving") {
             classNameString += " transitioning";
         }
 
-        if (isOpened) {
+        if (currentState.value === "open") {
             classNameString += " opened";
-        } else if (isShowed) {
+        } else if (currentState.value === "closed" || currentState.value === "moving") {
             classNameString += " showed";
         }
 
@@ -89,11 +238,11 @@ function SideMenu(props: React.PropsWithChildren<zod.infer<typeof SideMenuPropsV
     };
 
     const getStyle = () => {
-        if (!isMoving) {
+        if (currentState.value !== "moving") {
             return {};
         }
 
-        let left = componentStartPositionX + offsetX;
+        let left = currentState.context.componentStartX + currentState.context.offsetX;
 
         if (isRightSideMenu()) {
             return {left: Math.max(20, Math.min(left, 103)) + "%"};
@@ -103,50 +252,21 @@ function SideMenu(props: React.PropsWithChildren<zod.infer<typeof SideMenuPropsV
     };
 
     const handleClick = () => {
-        if (globalSideMenuData.openMenuName !== props.name && !isOpened) {
+        if (globalSideMenuData.openMenuName !== props.name) {
             dispatch(setOpenName(props.name));
         }
     };
 
     const handleTouchStart = (event: React.TouchEvent<HTMLDivElement>) => {
-        const componentLeftPx = ref.current.getBoundingClientRect().left;
-        const componentLeftPercent = 100 / window.innerWidth * componentLeftPx;
-
-        setComponentStartPositionX(componentLeftPercent);
-        setTouchStartX(event.touches[0].clientX);
-        setIsTransitioning(false);
+        sendToState({type: "TOUCH_START", payload: event});
     };
 
     const handleTouchMove = (event: React.TouchEvent<HTMLDivElement>) => {
-        const offsetX = 100 / window.innerWidth * (event.touches[0].clientX - touchStartX);
-        setOffsetX(offsetX);
-        let isMovingLeft = false;
-        if (isMoving === false && Math.abs(offsetX) > 1) {
-            setIsMoving(true);
-        }
-        if (offsetX < 0) {
-            isMovingLeft = true;
-        }
-        setIsMovingLeft(isMovingLeft);
+        sendToState({type: "TOUCH_MOVE", payload: event});
     };
 
     const handleTouchEnd = () => {
-        if (isMoving === true && Math.abs(offsetX) > minStateChangeOffsetPercent) {
-            if (
-                (isRightSideMenu() && isMovingLeft)
-                || (!isRightSideMenu() && !isMovingLeft)
-            ) {
-                dispatch(setOpenName(props.name));
-            } else {
-                dispatch(setOpenName(""));
-            }
-        }
-
-        setOffsetX(0);
-        setTouchStartX(0);
-        setIsMoving(false);
-        setIsTransitioning(true);
-        setComponentStartPositionX(null);
+        sendToState("TOUCH_END");
     };
 
     return (

@@ -23,7 +23,7 @@ function App() {
                     <SettingsScene/>
                     <ControlMenu/>
 
-                    {/*<CategoriesSideMenu/>*/}
+                    <CategoriesSideMenu/>
 
                     <ModalBackground/>
                     <ConfirmOrderModal/>

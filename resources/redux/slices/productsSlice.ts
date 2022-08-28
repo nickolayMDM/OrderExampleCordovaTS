@@ -33,7 +33,7 @@ const validate = {
         validate.limit(value.limit);
     },
     categoryID: (value: number) => {
-        if (!validators.isPositiveInteger(value) && !validators.isNull(value)) errorHelpers.throwError("product list category ID must be a positive integer or null");
+        if (!validators.isNonNegativeInteger(value) && !validators.isNull(value)) errorHelpers.throwError("product list category ID must be a non-negative integer or null");
     },
     page: (value: number) => {
         if (!validators.isPositiveInteger(value)) errorHelpers.throwError("product list page must be a positive integer");

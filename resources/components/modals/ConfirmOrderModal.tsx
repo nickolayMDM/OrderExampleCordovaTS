@@ -14,10 +14,11 @@ import Form from "../commons/Form";
 import TextArea, {TextAreaElement} from "../commons/TextArea";
 import {BaseInputElement} from "../commons/Input/BaseInput";
 import {setInCartTotal, setInCartTotalPrice} from "../../redux/slices/cartSlice";
+import {createMachine} from "xstate";
+import {useMachine} from "@xstate/react";
 
 const modalName = "confirmOrder";
 
-//TODO: add xstate
 function ConfirmOrderModal() {
     const dispatch = useAppDispatch();
 
@@ -30,9 +31,6 @@ function ConfirmOrderModal() {
     let fullNameInputRef = React.useRef<BaseInputElement>();
     let phoneInputRef = React.useRef<BaseInputElement>();
     let addressInputRef = React.useRef<TextAreaElement>();
-
-    React.useEffect(() => {
-    }, [accountFullName, accountPhone, accountAddress]);
 
     const preFillForm = () => {
         fullNameInputRef.current.setValue(accountFullName);

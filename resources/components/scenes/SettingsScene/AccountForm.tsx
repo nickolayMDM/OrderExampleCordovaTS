@@ -1,32 +1,37 @@
 import * as React from 'react';
-import validators from "../../../helpers/validators";
 import {useAppSelector, useAppDispatch} from "../../../redux/hooks";
 import {useTranslations} from "../../../adapters/translatorAdapter";
-import {setFullName as setAccountFullName, setPhone as setAccountPhone, setAddress as setAccountAddress} from "../../../redux/slices/accountSlice";
+import {
+    setFullName as setAccountFullName,
+    setPhone as setAccountPhone,
+    setAddress as setAccountAddress,
+    validators as accountValidators,
+    errorMessages as accountErrorMessages
+} from "../../../redux/slices/accountSlice";
 
 import TextInput from "../../commons/Input/TextInput";
 import TextArea, {TextAreaElement} from "../../commons/TextArea";
 import Form from "../../commons/Form";
-import Button from "../../commons/Button"
+import SubmitButton, {SubmitButtonElement} from "./AccountForm/SubmitButton";
 import {BaseInputElement} from "../../commons/Input/BaseInput"
 
-const transitionTimeMS = 1000;
-
-//TODO: add xstate to button
 function SettingsSceneAccountForm() {
     const dispatch = useAppDispatch();
 
     const localeCode = useAppSelector((state) => state.language.localeCode);
     const [translate] = useTranslations(localeCode);
 
-    let [isUserDataSaving, setIsUserDataSaving] = React.useState(false);
-    let [saveButtonFadeClassName, setSaveButtonFadeClassName] = React.useState("");
     let fullNameInputRef = React.useRef<BaseInputElement>();
     let phoneInputRef = React.useRef<BaseInputElement>();
     let addressInputRef = React.useRef<TextAreaElement>();
+    let submitButtonRef = React.useRef<SubmitButtonElement>();
+
+    const validateForm = () => {
+        return phoneInputRef.current.validate();
+    };
 
     const onOrderEndpointDataSubmit = () => {
-        if (isUserDataSaving) {
+        if (!validateForm()) {
             return;
         }
 
@@ -34,45 +39,17 @@ function SettingsSceneAccountForm() {
         dispatch(setAccountPhone(phoneInputRef.current.getValue()));
         dispatch(setAccountAddress(addressInputRef.current.getValue()));
 
-        setIsUserDataSaving(true);
-        setSaveButtonFadeClassName("button-success");
-
-        setTimeout(() => {
-            setSaveButtonFadeClassName("transition-all-slow");
-        }, 500);
-        setTimeout(() => {
-            setIsUserDataSaving(false);
-            setSaveButtonFadeClassName("");
-        }, transitionTimeMS)
-    };
-
-    const getSaveButtonClassName = () => {
-        let className = "save-button form-margin";
-
-        if (validators.isPopulatedString(saveButtonFadeClassName)) {
-            className += " " + saveButtonFadeClassName;
-        }
-
-        return className;
-    };
-
-    const getSaveButtonText = () => {
-        if (isUserDataSaving) {
-            return translate("Saved", "Actions");
-        }
-
-        return translate("Save", "Actions");
+        submitButtonRef.current.triggerEffect();
     };
 
     return (
         <Form onSubmit={onOrderEndpointDataSubmit}>
             <TextInput ref={fullNameInputRef} label={translate("Full name", "General")}/>
-            <TextInput ref={phoneInputRef} label={translate("Phone", "General")}/>
+            <TextInput ref={phoneInputRef} label={translate("Phone", "General")} validator={accountValidators.phone} invalid_title={accountErrorMessages.phone}/>
             <TextArea ref={addressInputRef} rows={4}
                       label={translate("Address", "General")}/>
             <div className="text-right">
-                <Button className={getSaveButtonClassName()}
-                        onClick={onOrderEndpointDataSubmit}>{getSaveButtonText()}</Button>
+                <SubmitButton ref={submitButtonRef} onClick={onOrderEndpointDataSubmit}/>
             </div>
         </Form>
     );
